@@ -169,7 +169,7 @@ async def cmd_inspection_yesno(callback: types.CallbackQuery, state: FSMContext)
             await input_inventory_number_message(callback.message, state)
         case 1:
             async with ClientSession() as api_session:
-                async with api_session.get(API_URL+'get_checkpoint', params={ 'resource_id': resource_id }) as resp:
+                async with api_session.get(API_URL+'get_checkpoint_by_resource_id', params={ 'resource_id': resource_id }) as resp:
                     response: ClientResponse = resp
                     match response.status:
                         case 204:
