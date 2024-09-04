@@ -26,19 +26,25 @@ class Inspection(StatesGroup):
     begin_datetime = State()
     end_datetime = State()
     reason = State()
+    answer = State()
 
 def yesno_btns(id: int, is_word: bool = False) -> dict:
     # "❎"
     # "✅"
     if is_word:
         return {"Да": f"btn_inspection_yesno_{id}_1", "Нет": f"btn_inspection_yesno_{id}_0"}
-    return {"✅ Исправно": f"btn_broken_{id}_1", "❌ Неисправно": f"btn_broken_{id}_0"}
+    return {"    ✅ Исправно    ": f"btn_broken_{id}_1", "    ❌ Неисправно    ": f"btn_broken_{id}_0"}
 
-async def checkpoint_btns(checkpoints: dict) -> dict:    
+def checkpoint_answer_btns(checkpoint_id: int, checkpoint_answers: dict, current_answers: list = None) -> dict:    
     btns = {}
-    for chkpnt in checkpoints:
-        key = f"{chkpnt.get('name')}"
-        btns.update({key: f"checkpoint_id_{chkpnt.id}"})
+    for answer in checkpoint_answers:
+        answer_id = answer.get('id')
+        answer = answer.get('answer')
+        if current_answers and answer_id in current_answers:
+            btns.update({f"    ✅ {answer}    ": f"checkpoint_answer_id_{checkpoint_id}_{answer_id}"})
+        else:
+            btns.update({f"    ➖ {answer}    ": f"checkpoint_answer_id_{checkpoint_id}_{answer_id}"})
+    btns.update({'Подтвердить': f"checkpoint_answer_id_{checkpoint_id}_"})
     return btns
 
 async def input_inventory_number_message(message: types.Message, state: FSMContext) -> None:
@@ -191,10 +197,15 @@ async def cmd_inspection_yesno(callback: types.CallbackQuery, state: FSMContext)
     current_result[callback.message.chat.id].setdefault('checkpoint', [])
     match checkpoint_status:
         case 0:
-            current_result[callback.message.chat.id]['checkpoint'].append({ checkpoint_id : { 'checkpoint_id': checkpoint_id, 'description': None } })
+            current_result[callback.message.chat.id]['checkpoint'].append({ checkpoint_id : { 'checkpoint_id': checkpoint_id, 'checkpoint_answers': [], 'description': None } })
             await callback.message.edit_text(f'❌ {callback.message.text}')
-            await callback.message.answer('Укажите неисправность')
-            await state.set_state(Inspection.reason)
+            checkpoint: dict = next(filter(lambda d: d.get('id') == checkpoint_id, current_chat_checklist.get(callback.message.chat.id)), None)
+            if checkpoint and checkpoint.get('answer'):
+                await callback.message.answer('Укажите неисправность', reply_markup=get_callback_btns(btns = checkpoint_answer_btns(checkpoint_id, checkpoint.get('answer')), sizes=(1, )))
+                await state.set_state(Inspection.answer)
+            else:
+                await callback.message.answer('Опишите неисправность')
+                await state.set_state(Inspection.reason)
         case 1:
             current_result[callback.message.chat.id]['checkpoint'].append({ checkpoint_id: { 'checkpoint_id': checkpoint_id, 'is_good': 'True' } })
             await callback.message.edit_text(f'✅ {callback.message.text}')
@@ -209,3 +220,29 @@ async def cmd_set_reason(message: types.Message, state: FSMContext) -> None:
     await message.answer(f'Описание неисправности: {message.text}')
     await state.clear()
     await get_next_checkpoint(message=message, state=state)
+
+
+@private_router.callback_query(Inspection.answer, F.data.startswith('checkpoint_answer_id_'))
+async def cmd_set_reason(callback: types.CallbackQuery, state: FSMContext) -> None:
+    data = callback.data.split('_')
+    checkpoint_id: int = int(data[-2])
+    answer: list = next(filter(lambda c: c.get(checkpoint_id), current_result[callback.message.chat.id]['checkpoint']), None).get(checkpoint_id).get('checkpoint_answers')
+    checkpoint: dict = next(filter(lambda d: d.get('id') == checkpoint_id, current_chat_checklist.get(callback.message.chat.id)), None)
+    match len(data[-1]):
+        case 0:
+            if answer:
+                answer_text: str = ';\n'.join(list(map(lambda c: c.get('answer'), filter(lambda c: c.get('id') in answer, checkpoint.get('answer')))))
+                await callback.message.edit_text(f'Описание неисправности:\n{answer_text}')
+                await state.clear()
+                await get_next_checkpoint(message=callback.message, state=state)
+        case _:
+            if answer is None:
+                answer = []
+            checkpoint_answer_id: int = int(data[-1])
+            if checkpoint_answer_id in answer:
+                answer.remove(checkpoint_answer_id)
+            else:
+                if checkpoint.get('is_multiple_answer') is not True:
+                    answer.clear()
+                answer.append(checkpoint_answer_id)
+            await callback.message.edit_reply_markup(reply_markup=get_callback_btns(btns = checkpoint_answer_btns(checkpoint_id, checkpoint.get('answer'), answer), sizes=(1, )))
