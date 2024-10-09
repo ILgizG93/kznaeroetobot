@@ -76,6 +76,7 @@ async def get_next_checkpoint(state: FSMContext, message: types.Message = None, 
                 if response.status == 200:
                     response_text: dict = json.loads(await response.text())
                     text = f"<b>Чек-лист <i>#{response_text.get('number')} от {response_text.get('datetime')}</i> на ресурс {resource_name} ({inventory_number}) создан.</b>"
+                    current_result[message.chat.id] = { 'employee_id': current_result.get(message.chat.id).get('employee_id') }
                 else:
                     text = "Ошибка при сохранении чек-листа"
                 await message.answer(text)
@@ -125,8 +126,7 @@ async def cmd_set_personal_number(message: types.Message, state: FSMContext) -> 
                         async with api_session.post(API_URL+'append_chat_id', params={ 'chat_id': message.chat.id, 'employee_id': response_text.get('id') }) as resp:
                             response: ClientResponse = resp
                     if response.status == 200:
-                        current_result[message.chat.id] = current_result.get(message.chat.id, {})
-                        current_result[message.chat.id]['employee_id'] = response_text.get('id')
+                        current_result[message.chat.id] = { 'employee_id': response_text.get('id') }
                         fio: str = f"{response_text.get('last_name')} {response_text.get('first_name')[0]}."
                         if response_text.get('middle_name'):
                             fio = fio + f"{response_text.get('middle_name')[0]}."
