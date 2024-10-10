@@ -4,8 +4,8 @@ After=multi-user.target
 
 [Service]
 User=admin_oit
-WorkingDirectory=/home/bots/kznaeroetobot
-ExecStart=/home/bots/kznaeroetobot/.venv/bin/python3.11 /home/bots/kznaeroetobot/main.py
+WorkingDirectory=/home/admin_oit/bots/kznaeroetobot
+ExecStart=/home/admin_oit/bots/kznaeroetobot/.venv/bin/python3.11 /home/admin_oit/bots/kznaeroetobot/main.py
 RestartSec=5
 Restart=always
 
